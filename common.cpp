@@ -19,6 +19,16 @@ double size;
 #define min_r   (cutoff/100)
 #define dt      0.0005
 
+double getDensity()
+{
+    return density;
+}
+
+double getCutoff()
+{
+    return cutoff;
+}
+
 //
 //  timer
 //

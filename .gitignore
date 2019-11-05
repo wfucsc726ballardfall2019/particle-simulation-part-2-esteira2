@@ -1,0 +1,11 @@
+# ignore compiled files
+
+serial
+openmp
+autograder
+.vscode/
+*.out
+*.o
+*.txt
+*.error
+*.stdout
