@@ -3,6 +3,7 @@
 serial
 openmp
 autograder
+mpi
 .vscode/
 *.out
 *.o
