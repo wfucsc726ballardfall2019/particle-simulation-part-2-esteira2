@@ -2,7 +2,142 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <assert.h>
+#include <math.h>
+#include <vector>
+#include <iostream>
 #include "common.h"
+
+using namespace std;
+
+// Function to return which neighbors are valid
+vector<int > getNeighbors(int pos, int num_bins) {
+    vector<int > neighbors(0);
+    if (pos % num_bins == 0) {
+        // Left column
+        if (floor(pos / num_bins) == 0)
+        {
+            // Top row => top left corner
+            neighbors.push_back(pos);
+            neighbors.push_back(pos + 1);
+            neighbors.push_back(pos + num_bins);
+            neighbors.push_back(pos + num_bins + 1);
+            neighbors.push_back(-1);
+            neighbors.push_back(-1);
+            neighbors.push_back(-1);
+            neighbors.push_back(-1);
+            neighbors.push_back(-1);
+        }
+        else if (floor(pos / num_bins) == num_bins - 1)
+        {
+            // Bottom row => bottom left corner
+            neighbors.push_back(pos);
+            neighbors.push_back(pos + 1);
+            neighbors.push_back(pos - num_bins);
+            neighbors.push_back(pos - num_bins + 1);
+            neighbors.push_back(-1);
+            neighbors.push_back(-1);
+            neighbors.push_back(-1);
+            neighbors.push_back(-1);
+            neighbors.push_back(-1);
+        }
+        else
+        {
+            neighbors.push_back(pos);
+            neighbors.push_back(pos + 1);
+            neighbors.push_back(pos - num_bins);
+            neighbors.push_back(pos + num_bins);  
+            neighbors.push_back(pos - num_bins + 1);
+            neighbors.push_back(pos + num_bins + 1);    
+            neighbors.push_back(-1);
+            neighbors.push_back(-1);
+            neighbors.push_back(-1);
+        }
+    }
+    else if (pos % num_bins == num_bins - 1) {
+        // Right column
+
+        if (floor(pos / num_bins) == 0)
+        {
+            // Top row => top right corner
+            neighbors.push_back(pos);
+            neighbors.push_back(pos - 1);
+            neighbors.push_back(pos + num_bins);
+            neighbors.push_back(pos + num_bins - 1);
+            neighbors.push_back(-1);
+            neighbors.push_back(-1);
+            neighbors.push_back(-1);
+            neighbors.push_back(-1);
+            neighbors.push_back(-1);
+        }
+        else if (floor(pos / num_bins) == num_bins - 1)
+        {
+            // Bottom row => bottom right corner
+            neighbors.push_back(pos);
+            neighbors.push_back(pos - 1);
+            neighbors.push_back(pos - num_bins);
+            neighbors.push_back(pos - num_bins - 1);
+            neighbors.push_back(-1);
+            neighbors.push_back(-1);
+            neighbors.push_back(-1);
+            neighbors.push_back(-1);
+            neighbors.push_back(-1);
+        }
+        else 
+        {
+            neighbors.push_back(pos);
+            neighbors.push_back(pos - 1);
+            neighbors.push_back(pos - num_bins);
+            neighbors.push_back(pos - num_bins - 1);
+            neighbors.push_back(pos + num_bins);
+            neighbors.push_back(pos + num_bins - 1);
+            neighbors.push_back(-1);
+            neighbors.push_back(-1);
+            neighbors.push_back(-1);
+        }
+    }
+    else if (floor(pos / num_bins) == 0)
+    {
+        // Top row
+        neighbors.push_back(pos);
+        neighbors.push_back(pos - 1);
+        neighbors.push_back(pos + 1);
+        neighbors.push_back(pos + num_bins);
+        neighbors.push_back(pos + num_bins - 1);
+        neighbors.push_back(pos + num_bins + 1);
+        neighbors.push_back(-1);
+        neighbors.push_back(-1);
+        neighbors.push_back(-1);
+
+    }
+    else if(floor(pos / num_bins) == num_bins - 1)
+    {
+        // Bottom row
+        neighbors.push_back(pos);
+        neighbors.push_back(pos + 1);
+        neighbors.push_back(pos - 1);
+        neighbors.push_back(pos - num_bins);
+        neighbors.push_back(pos - num_bins - 1);
+        neighbors.push_back(pos - num_bins + 1);
+        neighbors.push_back(-1);
+        neighbors.push_back(-1);
+        neighbors.push_back(-1);
+    }
+    else 
+    {
+        // All eight neighbors are valid
+        neighbors.push_back(pos);
+        neighbors.push_back(pos + 1);
+        neighbors.push_back(pos - 1);
+        neighbors.push_back(pos + num_bins);
+        neighbors.push_back(pos - num_bins);
+        neighbors.push_back(pos + num_bins + 1);
+        neighbors.push_back(pos + num_bins - 1);
+        neighbors.push_back(pos - num_bins + 1);
+        neighbors.push_back(pos - num_bins - 1);
+    }
+
+    return neighbors;
+}
 
 //
 //  benchmarking program
@@ -38,7 +173,7 @@ int main( int argc, char **argv )
     int n_proc, rank;
     MPI_Init( &argc, &argv );
     MPI_Comm_size( MPI_COMM_WORLD, &n_proc );
-    MPI_Comm_rank( MPI_COMM_WORLD, &rank );
+    MPI_Comm_rank( MPI_COMM_WORLD, &rank ); // Processor ID numbers
     
     //
     //  allocate generic resources
@@ -50,35 +185,205 @@ int main( int argc, char **argv )
     particle_t *particles = (particle_t*) malloc( n * sizeof(particle_t) );
     
     MPI_Datatype PARTICLE;
-    MPI_Type_contiguous( 6, MPI_DOUBLE, &PARTICLE );
+    MPI_Type_contiguous( 6, MPI_DOUBLE, &PARTICLE ); // Stores info related to a particle contiguously
     MPI_Type_commit( &PARTICLE );
     
     //
     //  set up the data partitioning across processors
     //
     int particle_per_proc = (n + n_proc - 1) / n_proc;
-    int *partition_offsets = (int*) malloc( (n_proc+1) * sizeof(int) );
+    int *partition_offsets = (int*) malloc( (n_proc+1) * sizeof(int) ); // Describes index into particle array for knowing which particles belong to which process
     for( int i = 0; i < n_proc+1; i++ )
         partition_offsets[i] = min( i * particle_per_proc, n );
     
-    int *partition_sizes = (int*) malloc( n_proc * sizeof(int) );
+    int *partition_sizes = (int*) malloc( n_proc * sizeof(int) ); // Says how many particles a process is responsible for
     for( int i = 0; i < n_proc; i++ )
         partition_sizes[i] = partition_offsets[i+1] - partition_offsets[i];
+
+    /*if (rank == 0) {
+        for (int i = 0; i < n_proc+1; i++) {
+            cout << "----->" << partition_offsets[i] << endl;
+        }
+        cout << endl;
+    }*/
     
     //
     //  allocate storage for local partition
     //
     int nlocal = partition_sizes[rank];
-    particle_t *local = (particle_t*) malloc( nlocal * sizeof(particle_t) );
-    
+    particle_t *local = (particle_t*) malloc( nlocal * sizeof(particle_t) ); // Create array to store the particles local to a process
+
     //
     //  initialize and distribute the particles (that's fine to leave it unoptimized)
     //
     set_size( n );
-    if( rank == 0 )
+    if( rank == 0 ) {
         init_particles( n, particles );
-    MPI_Scatterv( particles, partition_sizes, partition_offsets, PARTICLE, local, nlocal, PARTICLE, 0, MPI_COMM_WORLD );
+    }
+    MPI_Scatterv( particles, partition_sizes, partition_offsets, PARTICLE, local, nlocal, PARTICLE, 0, MPI_COMM_WORLD ); // Now each processor has a chunk of the particles
     
+    /*if (rank == 0) {
+        cout << "~~~ ALL PARTICLES ~~~\n";
+        for (int i = 0; i < n; i++) {
+            cout << particles[i].x << " " << particles[i].y << endl;
+        }
+        cout << endl;
+    }
+
+    if (rank == 0) {
+        cout << "~~~ PARTICLES BELONGING TO 0 ~~~\n";
+        for (int i = 0; i < nlocal; i++)
+        {
+            cout << local[i].x << " " << local[i].y << endl;
+        }
+        cout << endl;
+    }
+
+    if (rank == 1) {
+        cout << "~~~ PARTICLES BELONGING TO 1 ~~~\n";
+        for (int i = 0; i < nlocal; i++)
+        {
+            cout << local[i].x << " " << local[i].y << endl;
+        }
+        cout << endl;
+    }*/
+ 
+    // Set the size of the bins
+    // The grid size is sqrt(0.0005 * number of particles)
+    // So make sure the bins only consider the cutoff radius where the particles actually react to each other
+    double bin_length = getCutoff() * 2;
+    int num_bins = ceil((sqrt(getDensity() * n)) / bin_length);
+
+    // Array to keep track of which particles are in which bins
+    // This will be a local copy for each processor
+    vector<vector<particle_t> > bins(num_bins * num_bins);
+    int offset_x;
+    int offset_y;
+    int which_bin;
+
+    // Compute which particles belong in which bin in parallel
+    //cout << "**** PROCESS " << rank << " ABOUT TO COMPUTE LOCAL BINS ****\n";
+    for (int i = 0; i < nlocal; i++)
+    {
+        // Compute which bin a particle belongs to based on its location
+        offset_x = floor(local[i].x / bin_length);
+        offset_y = floor(local[i].y / bin_length);
+
+        which_bin = num_bins * offset_y + offset_x;
+
+        // Add the particle to the list of particles in that bin
+        // This is the processors local version of the bins, so we don't have to worry about race conditions
+        bins[which_bin].push_back(local[i]);
+    }
+
+    /*if (rank == 0) {
+        cout << "**** PROCESS " << rank << " LOCAL BINS ****\n";
+        for (int i = 0; i < bins.size(); i++) {
+            cout << "### PROCESS " << rank << " BIN " << i << " ###\n";
+            for (int j = 0; j < bins[i].size(); j++) {
+                cout << bins[i][j].x << " " << bins[i][j].y << "\n";
+            }
+            cout << endl;
+        }
+    }*/
+
+    /*if (rank == 1) {
+        cout << "**** PROCESS " << rank << " LOCAL BINS ****\n";
+        for (int i = 0; i < bins.size(); i++) {
+            cout << "### PROCESS " << rank << " BIN " << i << " ###\n";
+            for (int j = 0; j < bins[i].size(); j++) {
+                cout << bins[i][j].x << " " << bins[i][j].y << "\n";
+            }
+            cout << endl;
+        }
+    }*/
+
+    // Send all the bins info to processor 0, who will then consolidate that into one list
+    //cout << "@@@@@ ABOUT TO SEND ALL BINS TO PROCESS 0 @@@@@\n";
+    for (int i = 0; i < bins.size(); i++) {
+        //if (rank == 0) {
+            //cout << "------> 0 is here, size " << bins.size() << "\n";
+        //}
+        //if (rank == 1) {
+            //cout << "-------> 1 is here, size " << bins.size() << "\n";
+        //}
+
+        if (rank != 0) {
+            int data_amt = bins[i].size();
+            //cout << "~~~ PROCESS " << rank << " is sending size ~~~\n";
+            MPI_Send(&data_amt, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
+
+            //cout << "~~~ PROCESS " << rank << " is sending data ~~~\n";
+            MPI_Send(&bins[i][0], data_amt, PARTICLE, 0, 0, MPI_COMM_WORLD);
+        }
+        else {
+            // Processor 0 collects all the info
+            for (int r = 1; r < n_proc; r++) {
+                //for (int k = 0; k < bins.size(); k++) {
+                    //cout << "~~~ PROCESS " << rank << " is receiving size ~~~\n";
+                    int data_amt;
+                    MPI_Recv(&data_amt, 1, MPI_INT, r, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
+                    //cout << "~~~ PROCESS " << rank << " is receiving data ~~~\n";
+                    vector<particle_t> temp_bini(data_amt);
+                    MPI_Recv(&temp_bini[0], data_amt, PARTICLE, r, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
+                    for (int j = 0; j < temp_bini.size(); j++) {
+                        bins[i].push_back(temp_bini[j]);
+                    }
+                //}
+            }
+        }
+    }
+
+    if (rank == 0) {
+        cout << "_____________ FINAL BINS ______________\n";
+        for (int i = 0; i < bins.size(); i++) {
+            cout << "### BIN " << i << " ###\n";
+            for (int j = 0; j < bins[i].size(); j++) {
+                cout << bins[i][j].x << " " << bins[i][j].y << "\n";
+            }
+            cout << endl;
+        }
+    }
+
+    // UP TO HERE WORKS
+
+    // Send from processor 0 the complete list of bins to all the processors
+    // First, figure out how much data needs to be sent per bin
+    int * bins_i_lengths = new (nothrow) int[num_bins];
+    if (rank == 0) {
+        for (int i = 0; i < bins.size(); i++) {
+            bins_i_lengths[i] = bins[i].size();
+            cout << "Size of bin " << i << " is " << bins_i_lengths[i] << endl;
+        }
+    }
+
+    // Next make sure each processor knows how much data to receive
+    MPI_Bcast(&bins_i_lengths, num_bins, MPI_INT, 0, MPI_COMM_WORLD);
+
+    // Make sure each processor has the correct amount of memory in place to receive data
+    if (rank != 0){
+        for (int i = 0; i < num_bins; i++) {
+            bins[i].resize(bins_i_lengths[i]);
+        }
+    }
+
+    // Broadcast the bins
+    for (int i = 0; i < num_bins; i++) {
+        MPI_Bcast(&bins[i][0], bins_i_lengths[i], PARTICLE, 0, MPI_COMM_WORLD);
+    }
+
+    /*if (rank == 0) {
+        for (int i = 0; i < bins.size(); i++) {
+            cout << "### BIN " << i << " ###\n";
+            for (int j = 0; j < bins[i].size(); j++) {
+                cout << bins[i][j].x << " " << bins[i][j].y << "\n";
+            }
+            cout << endl;
+        }
+    }*/
+
     //
     //  simulate a number of time steps
     //
