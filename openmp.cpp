@@ -6,138 +6,8 @@
 #include <iostream>
 #include "common.h"
 #include "omp.h"
-#define NEIGHBORS_SIZE 9
-
-void getNeighbors(int pos, int num_bins, int *neighbors);
-void clearNeighbors(int *neighbors);
 
 using namespace std;
-
-// Function to return which neighbors are valid
-void clearNeighbors(int *neighbors) {
-    for (int i = 0; i < NEIGHBORS_SIZE; i++) {
-        neighbors[i] = -1;
-    }
-}
-
-void getNeighbors(int pos, int num_bins, int *neighbors) {
-    neighbors[0] = pos;
-
-    if (pos % num_bins == 0) {
-        // Left column
-        if (floor(pos / num_bins) == 0)
-        {
-            // Top row => top left corner
-            neighbors[1] = (pos + 1);
-            neighbors[2] = (pos + num_bins);
-            neighbors[3] = (pos + num_bins + 1);
-            neighbors[4] = (-1);
-            neighbors[5] = (-1);
-            neighbors[6] = (-1);
-            neighbors[7] = (-1);
-            neighbors[8] = (-1);
-        }
-        else if (floor(pos / num_bins) == num_bins - 1)
-        {
-            // Bottom row => bottom left corner
-            neighbors[1] = (pos + 1);
-            neighbors[2] = (pos - num_bins);
-            neighbors[3] = (pos - num_bins + 1);
-            neighbors[4] = (-1);
-            neighbors[5] = (-1);
-            neighbors[6] = (-1);
-            neighbors[7] = (-1);
-            neighbors[8] = (-1);
-        }
-        else
-        {
-            neighbors[1] = (pos + 1);
-            neighbors[2] = (pos - num_bins);
-            neighbors[3] = (pos + num_bins);  
-            neighbors[4] = (pos - num_bins + 1);
-            neighbors[5] = (pos + num_bins + 1);    
-            neighbors[6] = (-1);
-            neighbors[7] = (-1);
-            neighbors[8] = (-1);
-        }
-    }
-    else if (pos % num_bins == num_bins - 1) {
-        // Right column
-
-        if (floor(pos / num_bins) == 0)
-        {
-            // Top row => top right corner
-            neighbors[1] = (pos - 1);
-            neighbors[2] = (pos + num_bins);
-            neighbors[3] = (pos + num_bins - 1);
-            neighbors[4] = (-1);
-            neighbors[5] = (-1);
-            neighbors[6] = (-1);
-            neighbors[7] = (-1);
-            neighbors[8] = (-1);
-        }
-        else if (floor(pos / num_bins) == num_bins - 1)
-        {
-            // Bottom row => bottom right corner
-            neighbors[1] = (pos - 1);
-            neighbors[2] = (pos - num_bins);
-            neighbors[3] = (pos - num_bins - 1);
-            neighbors[4] = (-1);
-            neighbors[5] = (-1);
-            neighbors[6] = (-1);
-            neighbors[7] = (-1);
-            neighbors[8] = (-1);
-        }
-        else 
-        {
-            neighbors[1] = (pos - 1);
-            neighbors[2] = (pos - num_bins);
-            neighbors[3] = (pos - num_bins - 1);
-            neighbors[4] = (pos + num_bins);
-            neighbors[5] = (pos + num_bins - 1);
-            neighbors[6] = (-1);
-            neighbors[7] = (-1);
-            neighbors[8] = (-1);
-        }
-    }
-    else if (floor(pos / num_bins) == 0)
-    {
-        // Top row
-        neighbors[1] = (pos - 1);
-        neighbors[2] = (pos + 1);
-        neighbors[3] = (pos + num_bins);
-        neighbors[4] = (pos + num_bins - 1);
-        neighbors[5] = (pos + num_bins + 1);
-        neighbors[6] = (-1);
-        neighbors[7] = (-1);
-        neighbors[8] = (-1);
-
-    }
-    else if(floor(pos / num_bins) == num_bins - 1)
-    {
-        // Bottom row
-        neighbors[1] = (pos + 1);
-        neighbors[2] = (pos - 1);
-        neighbors[3] = (pos - num_bins);
-        neighbors[4] = (pos - num_bins - 1);
-        neighbors[5] = (pos - num_bins + 1);
-        neighbors[6] = (-1);
-        neighbors[7] = (-1);
-        neighbors[8] = (-1);
-    }
-    else 
-    {
-        // All eight neighbors are valid
-        neighbors[1] = (pos + 1);
-        neighbors[2] = (pos - 1);
-        neighbors[3] = (pos + num_bins);
-        neighbors[4] = (pos - num_bins);
-        neighbors[5] = (pos + num_bins + 1);
-        neighbors[6] = (pos + num_bins - 1);
-        neighbors[7] = (pos - num_bins + 1);
-        neighbors[8] = (pos - num_bins - 1);
-    }
-}
 
 //
 //  benchmarking program
@@ -185,13 +55,23 @@ int main( int argc, char **argv )
     int offset_y;
     int which_bin;
 
-    // Initialize the lock
-    omp_lock_t binlock;
-    omp_init_lock(&binlock);
+    // Initialize the locks on each element in the bin
+    //cout << "num bins " << num_bins << endl;
+    //double bin_lock_init_time = read_timer();
+    /*omp_lock_t binlock[num_bins * num_bins];
+    for (int i = 0; i < num_bins * num_bins; i++) {
+        omp_init_lock(&(binlock[i]));
+    }
+    cout << "size of binlock = " << num_bins * num_bins << endl;*/
+    //bin_lock_init_time = read_timer() - bin_lock_init_time;
+    //printf("bin lock init time = %g seconds\n", bin_lock_init_time);
 
     // We can just split up the particles among all the processors, and they can perform this computation independently
     // We want to make sure all threads can access this vector
-    #pragma omp parallel for // This pragma divides the particles among the threads
+    double bin_comp_time = read_timer();
+    //cout << "here" << endl;
+    #pragma omp parallel for shared(bins)//, binlock) // This pragma divides the particles among the threads
+    //#pragma omp master // Just let master thread do this work
     for (int i = 0; i < n; i++)
     {
         // Compute which bin a particle belongs to based on its location
@@ -200,21 +80,31 @@ int main( int argc, char **argv )
 
         which_bin = num_bins * offset_y + offset_x;
 
+        //cout << "here " << i << " which bin " << which_bin << endl;
+
         // Add the particle to the list of particles in that bin
         // We have to be careful here to avoid data races, so put a barrier here 
         //#pragma omp critical
         // Instead of putting a critical section (in which case the code will run serially), put a lock
-        omp_set_lock(&binlock);
+        //omp_set_lock(&(binlock[which_bin]));
+        //cout << "inside lock, particle " << i << ", which bin " << which_bin << endl;
+        #pragma omp critical
         bins[which_bin].push_back(particles[i]);
-        omp_unset_lock(&binlock);
+        //omp_unset_lock(&(binlock[which_bin]));
     }
+    //cout << "here2" << endl;
+    bin_comp_time = read_timer() - bin_comp_time;
+    printf("bin comp time = %g seconds \n", bin_comp_time);
+    printf("bin comp time * (NSTEPS) = %g seconds \n", bin_comp_time * (NSTEPS));
+
+    //cout << "here2" << endl;
 
     //
     //  simulate a number of time steps
     //
     double simulation_time = read_timer( );
 
-    #pragma omp parallel private(dmin) shared(bins) // This pragma spawns the threads, so do all the parallel work in here
+    #pragma omp parallel private(dmin) shared(bins)//, binlock) // This pragma spawns the threads, so do all the parallel work in here
     {
     numthreads = p;
 
@@ -238,39 +128,34 @@ int main( int argc, char **argv )
         #pragma omp for reduction (+:navg) reduction(+:davg)
         for( int i = 0; i < n; i++ )
         {
+            // Get the neighbors in a better way than a bunch of if-else statements
+
             particles[i].ax = particles[i].ay = 0;
 
+            //double outer_force_time = read_timer();
             // Get the bin of the current particle
             offset_x = floor(particles[i].x / bin_length);
             offset_y = floor(particles[i].y / bin_length);
 
-            which_bin = num_bins * offset_y + offset_x;
+            //which_bin = num_bins * offset_y + offset_x;
 
-            // Get the neighbors of this bin 
-            getNeighbors(which_bin, num_bins, neighbors);
-            
-            // Now we have valid neighbors, so compute force between the current particle and the particles in the neighboring bins
-            // Consider each neighboring bin
-            //#pragma omp parallel for
-            for (int k = 0; k < NEIGHBORS_SIZE; k++)
-            {
-                if (neighbors[k] >= 0) 
-                {
-                    // Consider each particle in that bin
-                    //#pragma omp parallel for
-                    for (int p = 0; p < bins[neighbors[k]].size(); p++)
-                    {
+            // Make sure the x position doesn't go beyond 0 to num_bins - 1
+            for (int x = max(0, offset_x - 1); x <= min(offset_x + 1, num_bins - 1); x++) {
+                // Make sure the y position doesn't go beyond 0 to num_bins - 1
+                for (int y = max(0, offset_y - 1); y <= min(offset_y + 1, num_bins - 1); y++) {
+                    // Now compute which bin we are currently considering for our force computation
+                    which_bin = num_bins * y + x;
+                    // Consider each particle in that bin 
+                    for (int p = 0; p < bins[which_bin].size(); p++) {
                         // Compute the force between the current particle and the particles in this bin
-                        apply_force(particles[i], bins[neighbors[k]][p], &dmin, &davg, &navg);
+                        apply_force(particles[i], bins[which_bin][p], &dmin, &davg, &navg);
                     }
                 }
-
             }
-
-            // Clear the neighbors vector
-            clearNeighbors(neighbors);
+            //outer_force_time = read_timer() - outer_force_time;
+            //printf("outer force time = %g seconds", outer_force_time);
         }
-        
+        //cout << "here3" << endl;
 		
         //
         //  move particles
@@ -303,12 +188,14 @@ int main( int argc, char **argv )
 
         // The particles have moved, so update the particles in each bin
         // First, clear the current bin information
+        //double bin_update_time = read_timer();
         #pragma omp for
         for (int i = 0; i < num_bins * num_bins; i++) 
             bins[i].resize(0);
 
         // Update
         #pragma omp for
+        //#pragma omp master
         for (int i = 0; i < n; i++)
         {
             // Compute which bin a particle belongs to based on its location
@@ -320,23 +207,28 @@ int main( int argc, char **argv )
             // Add the particle to the list of particles in that bin
             //#pragma omp critical
             // Instead of putting a critical section (in which case the code will run serially), put a lock
-            omp_set_lock(&binlock);
+            //omp_set_lock(&(binlock[which_bin]));
+            #pragma omp critical
             bins[which_bin].push_back(particles[i]);
-            omp_unset_lock(&binlock);
+            //omp_unset_lock(&(binlock[which_bin]));
         }
+        //bin_update_time = read_timer() - bin_update_time;
+        //printf("bin update time = %g seconds", bin_update_time);
 
         // Clear the neighbors vector
-        clearNeighbors(neighbors);
+        //clearNeighbors(neighbors);
     }
     }
     simulation_time = read_timer( ) - simulation_time;
     
     printf( "n = %d,threads = %d, simulation time = %g seconds", n,numthreads, simulation_time);
 
-    // Destroy the lock
-    omp_destroy_lock(&binlock);
+    // Destroy the locks
+    /*for (int i = 0; i < num_bins * num_bins; i++) {
+        omp_destroy_lock(&(binlock[i]));
+    }*/
 
-    if( find_option( argc, argv, "-no" ) == -1 )
+    if( find_option( argc, argv, "-no" ) == -1 ) 
     {
       if (nabsavg) absavg /= nabsavg;
     // 
