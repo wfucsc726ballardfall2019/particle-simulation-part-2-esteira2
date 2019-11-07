@@ -70,13 +70,6 @@ int main( int argc, char **argv )
     for( int i = 0; i < n_proc; i++ )
         partition_sizes[i] = partition_offsets[i+1] - partition_offsets[i];
 
-    /*if (rank == 0) {
-        for (int i = 0; i < n_proc+1; i++) {
-            cout << "----->" << partition_offsets[i] << endl;
-        }
-        cout << endl;
-    }*/
-    
     //
     //  allocate storage for local partition
     //
@@ -92,38 +85,11 @@ int main( int argc, char **argv )
     }
     MPI_Scatterv( particles, partition_sizes, partition_offsets, PARTICLE, local, nlocal, PARTICLE, 0, MPI_COMM_WORLD ); // Now each processor has a chunk of the particles
     
-    /*if (rank == 0) {
-        cout << "~~~ ALL PARTICLES ~~~\n";
-        for (int i = 0; i < n; i++) {
-            cout << particles[i].x << " " << particles[i].y << endl;
-        }
-        cout << endl;
-    }
-
-    if (rank == 0) {
-        cout << "~~~ PARTICLES BELONGING TO 0 ~~~\n";
-        for (int i = 0; i < nlocal; i++)
-        {
-            cout << local[i].x << " " << local[i].y << endl;
-        }
-        cout << endl;
-    }
-
-    if (rank == 1) {
-        cout << "~~~ PARTICLES BELONGING TO 1 ~~~\n";
-        for (int i = 0; i < nlocal; i++)
-        {
-            cout << local[i].x << " " << local[i].y << endl;
-        }
-        cout << endl;
-    }*/
- 
     // Set the size of the bins
     // The grid size is sqrt(0.0005 * number of particles)
     // So make sure the bins only consider the cutoff radius where the particles actually react to each other
     double bin_length = getCutoff() * 2;
     int num_bins = ceil((sqrt(getDensity() * n)) / bin_length);
-    //cout << "-----> num_bins " << num_bins << endl;
 
     // Array to keep track of which particles are in which bins
     // This will be a local copy for each processor
@@ -147,76 +113,30 @@ int main( int argc, char **argv )
         bins[which_bin].push_back(local[i]);
     }
 
-    /*if (rank == 0) {
-        cout << "**** PROCESS " << rank << " LOCAL BINS ****\n";
-        for (int i = 0; i < bins.size(); i++) {
-            cout << "### PROCESS " << rank << " BIN " << i << " ###\n";
-            for (int j = 0; j < bins[i].size(); j++) {
-                cout << bins[i][j].x << " " << bins[i][j].y << "\n";
-            }
-            cout << endl;
-        }
-    }*/
-
-    /*if (rank == 1) {
-        cout << "**** PROCESS " << rank << " LOCAL BINS ****\n";
-        for (int i = 0; i < bins.size(); i++) {
-            cout << "### PROCESS " << rank << " BIN " << i << " ###\n";
-            for (int j = 0; j < bins[i].size(); j++) {
-                cout << bins[i][j].x << " " << bins[i][j].y << "\n";
-            }
-            cout << endl;
-        }
-    }*/
-
     // Send all the bins info to processor 0, who will then consolidate that into one list
-    //cout << "@@@@@ ABOUT TO SEND ALL BINS TO PROCESS 0 @@@@@\n";
     for (int i = 0; i < bins.size(); i++) {
-        //if (rank == 0) {
-            //cout << "------> 0 is here, size " << bins.size() << "\n";
-        //}
-        //if (rank == 1) {
-            //cout << "-------> 1 is here, size " << bins.size() << "\n";
-        //}
-
         if (rank != 0) {
             int data_amt = bins[i].size();
-            //cout << "~~~ PROCESS " << rank << " is sending size ~~~\n";
             MPI_Send(&data_amt, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
 
-            //cout << "~~~ PROCESS " << rank << " is sending data ~~~\n";
             MPI_Send(&bins[i][0], data_amt, PARTICLE, 0, 0, MPI_COMM_WORLD);
         }
         else {
             // Processor 0 collects all the info
             for (int r = 1; r < n_proc; r++) {
-                //for (int k = 0; k < bins.size(); k++) {
-                    //cout << "~~~ PROCESS " << rank << " is receiving size ~~~\n";
-                    int data_amt;
-                    MPI_Recv(&data_amt, 1, MPI_INT, r, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+                int data_amt;
+                MPI_Recv(&data_amt, 1, MPI_INT, r, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
-                    //cout << "~~~ PROCESS " << rank << " is receiving data ~~~\n";
-                    vector<particle_t> temp_bini(data_amt);
-                    MPI_Recv(&temp_bini[0], data_amt, PARTICLE, r, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+                //cout << "~~~ PROCESS " << rank << " is receiving data ~~~\n";
+                vector<particle_t> temp_bini(data_amt);
+                MPI_Recv(&temp_bini[0], data_amt, PARTICLE, r, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
-                    for (int j = 0; j < temp_bini.size(); j++) {
-                        bins[i].push_back(temp_bini[j]);
-                    }
-                //}
+                for (int j = 0; j < temp_bini.size(); j++) {
+                    bins[i].push_back(temp_bini[j]);
+                }
             }
         }
     }
-
-    /*if (rank == 0) {
-        cout << "_____________ FINAL BINS ______________\n";
-        for (int i = 0; i < bins.size(); i++) {
-            cout << "### BIN " << i << " ###\n";
-            for (int j = 0; j < bins[i].size(); j++) {
-                cout << bins[i][j].x << " " << bins[i][j].y << "\n";
-            }
-            cout << endl;
-        }
-    }*/
 
     // Send from processor 0 the complete list of bins to all the processors
     // First, figure out how much data needs to be sent per bin
@@ -224,18 +144,11 @@ int main( int argc, char **argv )
     if (rank == 0) {
         for (int i = 0; i < num_bins * num_bins; i++) {
             bins_i_lengths[i] = bins[i].size();
-            //cout << "~~~~Size of bin " << i << " is " << bins_i_lengths[i] << endl;
         }
     }
 
     // Next make sure each processor knows how much data to receive
     MPI_Bcast(bins_i_lengths, num_bins * num_bins, MPI_INT, 0, MPI_COMM_WORLD);
-
-    /*if (rank == 1) {
-        for (int i = 0; i < num_bins * num_bins; i++) {
-            cout << "Size of bin " << i << " is " << bins_i_lengths[i] << endl;
-        }
-    }*/
 
     // Make sure each processor has the correct amount of memory in place to receive data
     if (rank != 0){
@@ -248,18 +161,6 @@ int main( int argc, char **argv )
     for (int i = 0; i < num_bins * num_bins; i++) {
         MPI_Bcast(&bins[i][0], bins_i_lengths[i], PARTICLE, 0, MPI_COMM_WORLD);
     }
-
-    /*if (rank != 0) {
-        for (int i = 0; i < bins.size(); i++) {
-            cout << "*** BIN " << i << " , rank " << rank << "***\n";
-            for (int j = 0; j < bins[i].size(); j++) {
-                cout << bins[i][j].x << " " << bins[i][j].y << "\n";
-            }
-            cout << endl;
-        }
-    }*/
-
-    // UP TO HERE WORKS
 
     //
     //  simulate a number of time steps
@@ -360,20 +261,16 @@ int main( int argc, char **argv )
         for (int i = 0; i < bins.size(); i++) {
             if (rank != 0) {
                 int data_amt = bins[i].size();
-                //cout << "~~~ PROCESS " << rank << " is sending size ~~~\n";
                 MPI_Send(&data_amt, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
 
-                //cout << "~~~ PROCESS " << rank << " is sending data ~~~\n";
                 MPI_Send(&bins[i][0], data_amt, PARTICLE, 0, 0, MPI_COMM_WORLD);
             }
             else {
                 // Processor 0 collects all the info
                 for (int r = 1; r < n_proc; r++) {
-                    //cout << "~~~ PROCESS " << rank << " is receiving size ~~~\n";
                     int data_amt;
                     MPI_Recv(&data_amt, 1, MPI_INT, r, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
-                    //cout << "~~~ PROCESS " << rank << " is receiving data ~~~\n";
                     vector<particle_t> temp_bini(data_amt);
                     MPI_Recv(&temp_bini[0], data_amt, PARTICLE, r, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
@@ -390,18 +287,11 @@ int main( int argc, char **argv )
         if (rank == 0) {
             for (int i = 0; i < num_bins * num_bins; i++) {
                 bins_i_lengths[i] = bins[i].size();
-                //cout << "~~~~Size of bin " << i << " is " << bins_i_lengths[i] << endl;
             }
         }
 
         // Next make sure each processor knows how much data to receive
         MPI_Bcast(bins_i_lengths, num_bins * num_bins, MPI_INT, 0, MPI_COMM_WORLD);
-
-        /*if (rank == 1) {
-            for (int i = 0; i < num_bins * num_bins; i++) {
-                cout << "Size of bin " << i << " is " << bins_i_lengths[i] << endl;
-            }
-        }*/
 
         // Make sure each processor has the correct amount of memory in place to receive data
         if (rank != 0){
