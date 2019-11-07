@@ -9,136 +9,6 @@
 
 using namespace std;
 
-// Function to return which neighbors are valid
-vector<int > getNeighbors(int pos, int num_bins) {
-    vector<int > neighbors(0);
-    if (pos % num_bins == 0) {
-        // Left column
-        if (floor(pos / num_bins) == 0)
-        {
-            // Top row => top left corner
-            neighbors.push_back(pos);
-            neighbors.push_back(pos + 1);
-            neighbors.push_back(pos + num_bins);
-            neighbors.push_back(pos + num_bins + 1);
-            neighbors.push_back(-1);
-            neighbors.push_back(-1);
-            neighbors.push_back(-1);
-            neighbors.push_back(-1);
-            neighbors.push_back(-1);
-        }
-        else if (floor(pos / num_bins) == num_bins - 1)
-        {
-            // Bottom row => bottom left corner
-            neighbors.push_back(pos);
-            neighbors.push_back(pos + 1);
-            neighbors.push_back(pos - num_bins);
-            neighbors.push_back(pos - num_bins + 1);
-            neighbors.push_back(-1);
-            neighbors.push_back(-1);
-            neighbors.push_back(-1);
-            neighbors.push_back(-1);
-            neighbors.push_back(-1);
-        }
-        else
-        {
-            neighbors.push_back(pos);
-            neighbors.push_back(pos + 1);
-            neighbors.push_back(pos - num_bins);
-            neighbors.push_back(pos + num_bins);  
-            neighbors.push_back(pos - num_bins + 1);
-            neighbors.push_back(pos + num_bins + 1);    
-            neighbors.push_back(-1);
-            neighbors.push_back(-1);
-            neighbors.push_back(-1);
-        }
-    }
-    else if (pos % num_bins == num_bins - 1) {
-        // Right column
-
-        if (floor(pos / num_bins) == 0)
-        {
-            // Top row => top right corner
-            neighbors.push_back(pos);
-            neighbors.push_back(pos - 1);
-            neighbors.push_back(pos + num_bins);
-            neighbors.push_back(pos + num_bins - 1);
-            neighbors.push_back(-1);
-            neighbors.push_back(-1);
-            neighbors.push_back(-1);
-            neighbors.push_back(-1);
-            neighbors.push_back(-1);
-        }
-        else if (floor(pos / num_bins) == num_bins - 1)
-        {
-            // Bottom row => bottom right corner
-            neighbors.push_back(pos);
-            neighbors.push_back(pos - 1);
-            neighbors.push_back(pos - num_bins);
-            neighbors.push_back(pos - num_bins - 1);
-            neighbors.push_back(-1);
-            neighbors.push_back(-1);
-            neighbors.push_back(-1);
-            neighbors.push_back(-1);
-            neighbors.push_back(-1);
-        }
-        else 
-        {
-            neighbors.push_back(pos);
-            neighbors.push_back(pos - 1);
-            neighbors.push_back(pos - num_bins);
-            neighbors.push_back(pos - num_bins - 1);
-            neighbors.push_back(pos + num_bins);
-            neighbors.push_back(pos + num_bins - 1);
-            neighbors.push_back(-1);
-            neighbors.push_back(-1);
-            neighbors.push_back(-1);
-        }
-    }
-    else if (floor(pos / num_bins) == 0)
-    {
-        // Top row
-        neighbors.push_back(pos);
-        neighbors.push_back(pos - 1);
-        neighbors.push_back(pos + 1);
-        neighbors.push_back(pos + num_bins);
-        neighbors.push_back(pos + num_bins - 1);
-        neighbors.push_back(pos + num_bins + 1);
-        neighbors.push_back(-1);
-        neighbors.push_back(-1);
-        neighbors.push_back(-1);
-
-    }
-    else if(floor(pos / num_bins) == num_bins - 1)
-    {
-        // Bottom row
-        neighbors.push_back(pos);
-        neighbors.push_back(pos + 1);
-        neighbors.push_back(pos - 1);
-        neighbors.push_back(pos - num_bins);
-        neighbors.push_back(pos - num_bins - 1);
-        neighbors.push_back(pos - num_bins + 1);
-        neighbors.push_back(-1);
-        neighbors.push_back(-1);
-        neighbors.push_back(-1);
-    }
-    else 
-    {
-        // All eight neighbors are valid
-        neighbors.push_back(pos);
-        neighbors.push_back(pos + 1);
-        neighbors.push_back(pos - 1);
-        neighbors.push_back(pos + num_bins);
-        neighbors.push_back(pos - num_bins);
-        neighbors.push_back(pos + num_bins + 1);
-        neighbors.push_back(pos + num_bins - 1);
-        neighbors.push_back(pos - num_bins + 1);
-        neighbors.push_back(pos - num_bins - 1);
-    }
-
-    return neighbors;
-}
-
 //
 //  benchmarking program
 //
@@ -253,6 +123,7 @@ int main( int argc, char **argv )
     // So make sure the bins only consider the cutoff radius where the particles actually react to each other
     double bin_length = getCutoff() * 2;
     int num_bins = ceil((sqrt(getDensity() * n)) / bin_length);
+    //cout << "-----> num_bins " << num_bins << endl;
 
     // Array to keep track of which particles are in which bins
     // This will be a local copy for each processor
@@ -347,42 +218,48 @@ int main( int argc, char **argv )
         }
     }
 
-    // UP TO HERE WORKS
-
     // Send from processor 0 the complete list of bins to all the processors
     // First, figure out how much data needs to be sent per bin
-    int * bins_i_lengths = new (nothrow) int[num_bins];
+    int * bins_i_lengths = new (nothrow) int[num_bins * num_bins];
     if (rank == 0) {
-        for (int i = 0; i < bins.size(); i++) {
+        for (int i = 0; i < num_bins * num_bins; i++) {
             bins_i_lengths[i] = bins[i].size();
-            cout << "Size of bin " << i << " is " << bins_i_lengths[i] << endl;
+            //cout << "~~~~Size of bin " << i << " is " << bins_i_lengths[i] << endl;
         }
     }
 
     // Next make sure each processor knows how much data to receive
-    MPI_Bcast(&bins_i_lengths, num_bins, MPI_INT, 0, MPI_COMM_WORLD);
+    MPI_Bcast(bins_i_lengths, num_bins * num_bins, MPI_INT, 0, MPI_COMM_WORLD);
+
+    /*if (rank == 1) {
+        for (int i = 0; i < num_bins * num_bins; i++) {
+            cout << "Size of bin " << i << " is " << bins_i_lengths[i] << endl;
+        }
+    }*/
 
     // Make sure each processor has the correct amount of memory in place to receive data
     if (rank != 0){
-        for (int i = 0; i < num_bins; i++) {
+        for (int i = 0; i < num_bins * num_bins; i++) {
             bins[i].resize(bins_i_lengths[i]);
         }
     }
 
     // Broadcast the bins
-    for (int i = 0; i < num_bins; i++) {
+    for (int i = 0; i < num_bins * num_bins; i++) {
         MPI_Bcast(&bins[i][0], bins_i_lengths[i], PARTICLE, 0, MPI_COMM_WORLD);
     }
 
-    /*if (rank == 0) {
+    /*if (rank != 0) {
         for (int i = 0; i < bins.size(); i++) {
-            cout << "### BIN " << i << " ###\n";
+            cout << "*** BIN " << i << " , rank " << rank << "***\n";
             for (int j = 0; j < bins[i].size(); j++) {
                 cout << bins[i][j].x << " " << bins[i][j].y << "\n";
             }
             cout << endl;
         }
     }*/
+
+     // UP TO HERE WORKS
 
     //
     //  simulate a number of time steps
