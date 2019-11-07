@@ -56,22 +56,14 @@ int main( int argc, char **argv )
     int which_bin;
 
     // Initialize the locks on each element in the bin
-    //cout << "num bins " << num_bins << endl;
-    //double bin_lock_init_time = read_timer();
     /*omp_lock_t binlock[num_bins * num_bins];
     for (int i = 0; i < num_bins * num_bins; i++) {
         omp_init_lock(&(binlock[i]));
-    }
-    cout << "size of binlock = " << num_bins * num_bins << endl;*/
-    //bin_lock_init_time = read_timer() - bin_lock_init_time;
-    //printf("bin lock init time = %g seconds\n", bin_lock_init_time);
+    }*/
 
     // We can just split up the particles among all the processors, and they can perform this computation independently
-    // We want to make sure all threads can access this vector
-    double bin_comp_time = read_timer();
-    //cout << "here" << endl;
+    // We want to make sure all threads can access the bins vector
     #pragma omp parallel for shared(bins)//, binlock) // This pragma divides the particles among the threads
-    //#pragma omp master // Just let master thread do this work
     for (int i = 0; i < n; i++)
     {
         // Compute which bin a particle belongs to based on its location
@@ -92,12 +84,6 @@ int main( int argc, char **argv )
         bins[which_bin].push_back(particles[i]);
         //omp_unset_lock(&(binlock[which_bin]));
     }
-    //cout << "here2" << endl;
-    bin_comp_time = read_timer() - bin_comp_time;
-    printf("bin comp time = %g seconds \n", bin_comp_time);
-    printf("bin comp time * (NSTEPS) = %g seconds \n", bin_comp_time * (NSTEPS));
-
-    //cout << "here2" << endl;
 
     //
     //  simulate a number of time steps
@@ -110,7 +96,6 @@ int main( int argc, char **argv )
 
     // Make sure each thread has its own local copy of the following variables
     int thread_id = omp_get_thread_num();
-    int *neighbors = new (nothrow) int[NEIGHBORS_SIZE];
     int offset_x;
     int offset_y;
     int which_bin;
@@ -132,7 +117,6 @@ int main( int argc, char **argv )
 
             particles[i].ax = particles[i].ay = 0;
 
-            //double outer_force_time = read_timer();
             // Get the bin of the current particle
             offset_x = floor(particles[i].x / bin_length);
             offset_y = floor(particles[i].y / bin_length);
@@ -152,10 +136,7 @@ int main( int argc, char **argv )
                     }
                 }
             }
-            //outer_force_time = read_timer() - outer_force_time;
-            //printf("outer force time = %g seconds", outer_force_time);
         }
-        //cout << "here3" << endl;
 		
         //
         //  move particles
@@ -188,14 +169,12 @@ int main( int argc, char **argv )
 
         // The particles have moved, so update the particles in each bin
         // First, clear the current bin information
-        //double bin_update_time = read_timer();
         #pragma omp for
         for (int i = 0; i < num_bins * num_bins; i++) 
             bins[i].resize(0);
 
         // Update
         #pragma omp for
-        //#pragma omp master
         for (int i = 0; i < n; i++)
         {
             // Compute which bin a particle belongs to based on its location
@@ -212,11 +191,6 @@ int main( int argc, char **argv )
             bins[which_bin].push_back(particles[i]);
             //omp_unset_lock(&(binlock[which_bin]));
         }
-        //bin_update_time = read_timer() - bin_update_time;
-        //printf("bin update time = %g seconds", bin_update_time);
-
-        // Clear the neighbors vector
-        //clearNeighbors(neighbors);
     }
     }
     simulation_time = read_timer( ) - simulation_time;
