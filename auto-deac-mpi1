@@ -3,12 +3,15 @@
 #SBATCH --tasks-per-node=32
 #SBATCH --time=00:20:00
 #SBATCH --account=classes
-#SBATCH --mail-user=$USER@wfu.edu
+#SBATCH --mail-user=viviiv14@wfu.edu
 #SBATCH --mail-type=BEGIN,END,FAIL
 #SBATCH --nodes=1
 #SBATCH -J prtcls1
 #SBATCH -o prtcls1.%j.out
 #SBATCH -e prtcls1.%j.err
+
+cd /deac/classes/csc726/$USER/particle-simulation-part-2-esteira2
+filename="mpi1-${SLURM_JOB_ID}.txt"
 
 # set up environment
 module load rhel7/openmpi/4.0.2-gcc-4.8

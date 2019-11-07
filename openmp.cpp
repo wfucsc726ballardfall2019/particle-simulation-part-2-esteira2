@@ -56,7 +56,7 @@ int main( int argc, char **argv )
     int which_bin;
 
     // Initialize the locks on each element in the bin
-    /*omp_lock_t binlock[num_bins * num_bins];
+    /*omp_lock_t * binlock = (omp_lock_t *) malloc(num_bins * num_bins * sizeof(omp_lock_t));
     for (int i = 0; i < num_bins * num_bins; i++) {
         omp_init_lock(&(binlock[i]));
     }*/
