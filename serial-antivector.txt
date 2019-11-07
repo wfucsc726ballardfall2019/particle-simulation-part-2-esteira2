@@ -21,8 +21,3 @@ Slope estimate for line fit is: 1.117185
 Serial code is O(N^slope)
 Slope estimates are : 1.139208 1.117102 1.153495 1.098772
 Slope estimate for line fit is: 1.128775
-500 0.077604
-1000 0.164839
-2000 0.361731
-4000 0.805048
-8000 1.68476
