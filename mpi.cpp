@@ -207,7 +207,7 @@ int main( int argc, char **argv )
         }
     }
 
-    if (rank == 0) {
+    /*if (rank == 0) {
         cout << "_____________ FINAL BINS ______________\n";
         for (int i = 0; i < bins.size(); i++) {
             cout << "### BIN " << i << " ###\n";
@@ -216,7 +216,7 @@ int main( int argc, char **argv )
             }
             cout << endl;
         }
-    }
+    }*/
 
     // Send from processor 0 the complete list of bins to all the processors
     // First, figure out how much data needs to be sent per bin
@@ -259,7 +259,7 @@ int main( int argc, char **argv )
         }
     }*/
 
-     // UP TO HERE WORKS
+    // UP TO HERE WORKS
 
     //
     //  simulate a number of time steps
@@ -273,6 +273,7 @@ int main( int argc, char **argv )
         // 
         //  collect all global data locally (not good idea to do)
         //
+        // Now all the processors have access to the particles array
         MPI_Allgatherv( local, nlocal, PARTICLE, particles, partition_sizes, partition_offsets, PARTICLE, MPI_COMM_WORLD );
         
         //
@@ -285,11 +286,29 @@ int main( int argc, char **argv )
         //
         //  compute all forces
         //
+
+        // Loop through this processor's chunk of the particles
         for( int i = 0; i < nlocal; i++ )
         {
             local[i].ax = local[i].ay = 0;
-            for (int j = 0; j < n; j++ )
-                apply_force( local[i], particles[j], &dmin, &davg, &navg );
+
+            // Get the bin of the current particle
+            offset_x = floor(local[i].x / bin_length);
+            offset_y = floor(local[i].y / bin_length);
+
+            // Make sure the x position doesn't go beyond 0 to num_bins - 1
+            for (int x = max(0, offset_x - 1); x <= min(offset_x + 1, num_bins - 1); x++) {
+                // Make sure the y position doesn't go beyond 0 to num_bins - 1
+                for (int y = max(0, offset_y - 1); y <= min(offset_y + 1, num_bins - 1); y++) {
+                    // Now compute which bin we are currently considering for our force computation
+                    which_bin = num_bins * y + x;
+                    // Consider each particle in that bin 
+                    for (int p = 0; p < bins[which_bin].size(); p++) {
+                        // Compute the force between the current particle and the particles in this bin
+                        apply_force(local[i], bins[which_bin][p], &dmin, &davg, &navg);
+                    }
+                }
+            }
         }
      
         if( find_option( argc, argv, "-no" ) == -1 )
@@ -317,6 +336,85 @@ int main( int argc, char **argv )
         //
         for( int i = 0; i < nlocal; i++ )
             move( local[i] );
+
+
+        // Update bins and re-broadcast to everyone
+        // Clear current bin information
+        for (int i = 0; i < num_bins * num_bins; i++) 
+            bins[i].resize(0);
+        
+        // Update
+        for (int i = 0; i < nlocal; i++)
+        {
+            // Compute which bin a particle belongs to based on its location
+            offset_x = floor(local[i].x / bin_length);
+            offset_y = floor(local[i].y / bin_length);
+
+            which_bin = num_bins * offset_y + offset_x;
+
+            // Add the particle to the list of particles in that bin
+            // This is the processors local version of the bins, so we don't have to worry about race conditions
+            bins[which_bin].push_back(local[i]);
+        }
+
+        for (int i = 0; i < bins.size(); i++) {
+            if (rank != 0) {
+                int data_amt = bins[i].size();
+                //cout << "~~~ PROCESS " << rank << " is sending size ~~~\n";
+                MPI_Send(&data_amt, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
+
+                //cout << "~~~ PROCESS " << rank << " is sending data ~~~\n";
+                MPI_Send(&bins[i][0], data_amt, PARTICLE, 0, 0, MPI_COMM_WORLD);
+            }
+            else {
+                // Processor 0 collects all the info
+                for (int r = 1; r < n_proc; r++) {
+                    //cout << "~~~ PROCESS " << rank << " is receiving size ~~~\n";
+                    int data_amt;
+                    MPI_Recv(&data_amt, 1, MPI_INT, r, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
+                    //cout << "~~~ PROCESS " << rank << " is receiving data ~~~\n";
+                    vector<particle_t> temp_bini(data_amt);
+                    MPI_Recv(&temp_bini[0], data_amt, PARTICLE, r, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
+                    for (int j = 0; j < temp_bini.size(); j++) {
+                        bins[i].push_back(temp_bini[j]);
+                    }
+                }
+            }
+        }
+
+        // Send from processor 0 the complete list of bins to all the processors
+        // First, figure out how much data needs to be sent per bin
+        int * bins_i_lengths = new (nothrow) int[num_bins * num_bins];
+        if (rank == 0) {
+            for (int i = 0; i < num_bins * num_bins; i++) {
+                bins_i_lengths[i] = bins[i].size();
+                //cout << "~~~~Size of bin " << i << " is " << bins_i_lengths[i] << endl;
+            }
+        }
+
+        // Next make sure each processor knows how much data to receive
+        MPI_Bcast(bins_i_lengths, num_bins * num_bins, MPI_INT, 0, MPI_COMM_WORLD);
+
+        /*if (rank == 1) {
+            for (int i = 0; i < num_bins * num_bins; i++) {
+                cout << "Size of bin " << i << " is " << bins_i_lengths[i] << endl;
+            }
+        }*/
+
+        // Make sure each processor has the correct amount of memory in place to receive data
+        if (rank != 0){
+            for (int i = 0; i < num_bins * num_bins; i++) {
+                bins[i].resize(bins_i_lengths[i]);
+            }
+        }
+
+        // Broadcast the bins
+        for (int i = 0; i < num_bins * num_bins; i++) {
+            MPI_Bcast(&bins[i][0], bins_i_lengths[i], PARTICLE, 0, MPI_COMM_WORLD);
+        }
+
     }
     simulation_time = read_timer( ) - simulation_time;
   
